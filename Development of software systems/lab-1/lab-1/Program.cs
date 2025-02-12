@@ -41,7 +41,67 @@
     {
         // сделать фактори конструктор
 
+        private Rectangle(Point point_1_value, Point point_2_value, Point point_3_value, Point point_4_value)
+        {
+            point_1 = point_1_value;
+            point_2 = point_2_value;
+            point_3 = point_3_value;
+            point_4 = point_4_value;
+        }
 
+        private static int DistanceSquared(Point a, Point b)
+        {
+            return (b.x - a.x) * (b.x - a.x) + (b.y - a.y) * (b.y - a.y);
+        }
+
+        public static bool CanCreate(Point point_1_value, Point point_2_value, Point point_3_value, Point point_4_value)
+        {
+            // если данные корректны то поинт 1 противоположен поинт 2 то по Th Пифагора
+
+            int AB = DistanceSquared(point_1_value, point_2_value);
+            int BC = DistanceSquared(point_2_value, point_3_value);
+            int AC = DistanceSquared(point_1_value, point_3_value);
+
+            int AD = DistanceSquared(point_1_value, point_4_value);
+            int DC = DistanceSquared(point_4_value, point_3_value);
+            int BD = DistanceSquared(point_2_value, point_4_value);
+
+            if (AB + BC == AC && BD == AD + DC) return true;
+            return false;
+        }
+
+        // Фабричный метод для создания объекта с проверкой
+        public static Rectangle Create(Point point_1_value, Point point_2_value, Point point_3_value, Point point_4_value)
+        {
+            if (!CanCreate(point_1_value, point_2_value, point_3_value, point_4_value))
+            {
+                Console.WriteLine("не возможно создать прямоугольник");
+                return null; // Возвращаем null, если нельзя создать объект
+            }
+            Console.WriteLine("прямоугольник создан");
+            return new Rectangle(point_1_value, point_2_value, point_3_value, point_4_value);
+        }
+        public static Rectangle Create(int x1, int y1, int x2, int y2, int x3, int y3, int x4, int y4)
+        {
+            Point point_1 = new Point(x1, y1);
+            Point point_2 = new Point(x2, y2);
+            Point point_3 = new Point(x3, y3);
+            Point point_4 = new Point(x4, y4);
+
+            if (!CanCreate(point_1, point_2, point_3, point_4))
+            {
+                Console.WriteLine("не возможно создать прямоугольник");
+                return null; // Возвращаем null, если нельзя создать объект
+            }
+            Console.WriteLine("прямоугольник создан");
+            return new Rectangle(point_1, point_2, point_3, point_4);
+        }
+
+
+        public Point point_1 { get; }
+        public Point point_2 { get; }
+        public Point point_3 { get; }
+        public Point point_4 { get; }
     }
 
     class Program
@@ -114,7 +174,7 @@
                         exit = true;
                         break;
                     case (int) Сommands.console:
-
+                        Rectangle one = Rectangle.Create(2,1,2,2,4,2,4,4);
                         exit = true;
                         break;
                     default:
