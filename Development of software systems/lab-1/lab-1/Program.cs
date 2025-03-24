@@ -16,6 +16,11 @@
             y = other.y;
         }
 
+        public override string ToString()
+        {
+            return $"({x}, {y})";
+        }
+
         public double x { get; }
         public double y { get; }
     }
@@ -49,23 +54,23 @@
 
         public static bool CanCreate(Point p1, Point p2, Point p3, Point p4)
         {
-            double d12 = MathGeometrysolver.Distance(p1, p2);             // стороны
-            double d14 = MathGeometrysolver.Distance(p1, p4);
-            double d23 = MathGeometrysolver.Distance(p2, p3);
-            double d34 = MathGeometrysolver.Distance(p3, p4);
+            double d12 = MathGeometrySolver.Distance(p1, p2);             // стороны
+            double d14 = MathGeometrySolver.Distance(p1, p4);
+            double d23 = MathGeometrySolver.Distance(p2, p3);
+            double d34 = MathGeometrySolver.Distance(p3, p4);
 
-            double d13 = MathGeometrysolver.Distance(p1, p3);             // диагонали
-            double d24 = MathGeometrysolver.Distance(p2, p4);            
+            double d13 = MathGeometrySolver.Distance(p1, p3);             // диагонали
+            double d24 = MathGeometrySolver.Distance(p2, p4);            
 
 
-            bool is_opposite_sides_equal = MathGeometrysolver.IsEqual(d12,d34) &&     
-                                           MathGeometrysolver.IsEqual(d23,d14) &&     
-                                           MathGeometrysolver.IsEqual(d13,d24);
+            bool is_opposite_sides_equal = MathGeometrySolver.IsEqual(d12,d34) &&     
+                                           MathGeometrySolver.IsEqual(d23,d14) &&     
+                                           MathGeometrySolver.IsEqual(d13,d24);
 
-            bool is_angles90 = MathGeometrysolver.IsAngle90(p1, p2, p3) &&
-                               MathGeometrysolver.IsAngle90(p2, p3, p4) &&
-                               MathGeometrysolver.IsAngle90(p3, p4, p1) &&
-                               MathGeometrysolver.IsAngle90(p4, p1, p2);
+            bool is_angles90 = MathGeometrySolver.IsAngle90(p1, p2, p3) &&
+                               MathGeometrySolver.IsAngle90(p2, p3, p4) &&
+                               MathGeometrySolver.IsAngle90(p3, p4, p1) &&
+                               MathGeometrySolver.IsAngle90(p4, p1, p2);
 
             return is_opposite_sides_equal && is_angles90;
         }
@@ -76,6 +81,17 @@
             if (!CanCreate(point_1_value, point_2_value, point_3_value, point_4_value)) return null;
 
             return new Rectangle(point_1_value, point_2_value, point_3_value, point_4_value);
+        }
+        public static Rectangle Create(double x1, double y1, double x2, double y2, double x3, double y3, double x4, double y4)
+        {
+            // Создаём точки из координат
+            Point p1 = new Point(x1, y1);
+            Point p2 = new Point(x2, y2);
+            Point p3 = new Point(x3, y3);
+            Point p4 = new Point(x4, y4);
+
+            // Вызываем основной метод Create
+            return Create(p1, p2, p3, p4);
         }
 
         public Point point_1 { get; }
@@ -101,7 +117,8 @@
             while (true)
             {
                 Console.WriteLine( "1 - запустить программу" +
-                            "\n" + "2 - выйти из программы " );
+                                   "\n" +  
+                                   "2 - выйти из программы " );
                 command = InputNumFromSTDIN();
 
                 switch (command)
@@ -163,7 +180,15 @@
                 }
             }
 
+            Rectangle rect = Rectangle.Create(InputNumFromSTDIN(), InputNumFromSTDIN(), 
+                                              InputNumFromSTDIN(), InputNumFromSTDIN(),
+                                              InputNumFromSTDIN(), InputNumFromSTDIN(),
+                                              InputNumFromSTDIN(), InputNumFromSTDIN());
 
+            if (rect == null)
+            {
+                Console.WriteLine("ошибка");
+            }
         }
 
 
@@ -172,7 +197,7 @@
 
 
 
-    static class MathGeometrysolver
+    static class MathGeometrySolver
     {
         public static double Distance(Point p1, Point p2)
         {
@@ -199,6 +224,32 @@
 
             // Если скалярное произведение равно нулю, угол прямой
             return IsEqual(dotProduct, 0);
+        }
+
+        public static Point? FindIntersection(Segment s1, Segment s2)
+        {
+            double     x1 = s1.point_1.x,    y1 = s1.point_1.y;
+            double     x2 = s1.point_2.x,    y2 = s1.point_2.y;
+            double     x3 = s2.point_1.x,    y3 = s2.point_1.y;
+            double     x4 = s2.point_2.x,    y4 = s2.point_2.y;
+
+            double denominator = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4);
+
+            // Если знаменатель 0, значит отрезки параллельны или совпадают
+            if (Math.Abs(denominator) < 1e-10) return null;
+
+            double t = ((x3 - x1) * (y3 - y4) - (y3 - y1) * (x3 - x4)) / denominator;
+            double u = ((x3 - x1) * (y1 - y2) - (y3 - y1) * (x1 - x2)) / denominator;
+
+            // Если t и u в пределах [0, 1], значит отрезки пересекаются
+            if (t >= 0 && t <= 1 && u >= 0 && u <= 1)
+            {
+                double x = x1 + t * (x2 - x1);
+                double y = y1 + t * (y2 - y1);
+                return new Point(x, y);
+            }
+
+            return null; // Отрезки не пересекаются
         }
     }
 }
