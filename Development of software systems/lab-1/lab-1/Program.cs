@@ -3,7 +3,7 @@
 
     class Point
     {
-        public Point(int x_value,int y_value)
+        public Point(double x_value,double y_value)
         {
             x = x_value;
             y = y_value;
@@ -16,18 +16,18 @@
             y = other.y;
         }
 
-        public int x { get; }
-       public int y { get; }
+        public double x { get; }
+        public double y { get; }
     }
 
     class Segment
     {
-        public Segment(int x1_value, int y1_value, int x2_value, int y2_value)
+        public Segment(double x1_value, double y1_value, double x2_value, double y2_value)
         {
            point_1 = new Point(x1_value,y1_value);
            point_2 = new Point(x2_value,y2_value);
         }
-        public Segment(Point point_1_value, Point point_2_value) // передеча по ссылке значений точек
+        public Segment(Point point_1_value, Point point_2_value)    
         {
             point_1 = point_1_value;
             point_2 = point_2_value;
@@ -36,12 +36,52 @@
         public Point point_1 { get; }
         public Point point_2 { get; }
     }
-
+      
     class Rectangle
     {
-        // сделать фактори конструктор
+        private Rectangle(Point point_1_value, Point point_2_value, Point point_3_value, Point point_4_value)
+        {
+            point_1 = point_1_value;
+            point_2 = point_2_value;
+            point_3 = point_1_value;
+            point_4 = point_2_value;
+        }
+
+        public static bool CanCreate(Point p1, Point p2, Point p3, Point p4)
+        {
+            double d12 = MathGeometrysolver.Distance(p1, p2);             // стороны
+            double d14 = MathGeometrysolver.Distance(p1, p4);
+            double d23 = MathGeometrysolver.Distance(p2, p3);
+            double d34 = MathGeometrysolver.Distance(p3, p4);
+
+            double d13 = MathGeometrysolver.Distance(p1, p3);             // диагонали
+            double d24 = MathGeometrysolver.Distance(p2, p4);            
 
 
+            bool is_opposite_sides_equal = MathGeometrysolver.IsEqual(d12,d34) &&     
+                                           MathGeometrysolver.IsEqual(d23,d14) &&     
+                                           MathGeometrysolver.IsEqual(d13,d24);
+
+            bool is_angles90 = MathGeometrysolver.IsAngle90(p1, p2, p3) &&
+                               MathGeometrysolver.IsAngle90(p2, p3, p4) &&
+                               MathGeometrysolver.IsAngle90(p3, p4, p1) &&
+                               MathGeometrysolver.IsAngle90(p4, p1, p2);
+
+            return is_opposite_sides_equal && is_angles90;
+        }
+
+        // (static factory method)
+        public static Rectangle Create(Point point_1_value, Point point_2_value, Point point_3_value, Point point_4_value)
+        {
+            if (!CanCreate(point_1_value, point_2_value, point_3_value, point_4_value)) return null;
+
+            return new Rectangle(point_1_value, point_2_value, point_3_value, point_4_value);
+        }
+
+        public Point point_1 { get; }
+        public Point point_2 { get; }
+        public Point point_3 { get; }
+        public Point point_4 { get; }
     }
 
     class Program
@@ -129,54 +169,51 @@
 
 
     }
+
+
+
+    static class MathGeometrysolver
+    {
+        public static double Distance(Point p1, Point p2)
+        {
+            return Math.Sqrt(Math.Pow(p2.x - p1.x, 2) + Math.Pow(p2.y - p1.y, 2));
+        }
+
+        public static bool IsEqual(double a, double b, double epsilon = 0.0001)
+        {
+            return Math.Abs(a - b) < epsilon;
+        }
+
+        public static bool IsAngle90(Point p1, Point p2, Point p3)
+        {
+            // Вектор от p2 к p1
+            double dx1 = p1.x - p2.x;
+            double dy1 = p1.y - p2.y;
+
+            // Вектор от p2 к p3
+            double dx2 = p3.x - p2.x;
+            double dy2 = p3.y - p2.y;
+
+            // Скалярное произведение векторов
+            double dotProduct = dx1 * dx2 + dy1 * dy2;
+
+            // Если скалярное произведение равно нулю, угол прямой
+            return IsEqual(dotProduct, 0);
+        }
+    }
 }
+
+
+
+
+
 
 /* TO DO
- *  class segment
- *  class прямоугольник
+
  *  2 функциии с пересечением отрезков и прямоугольника
- *  надо ли праверку на прямоугольность
+ *  праверку на прямоугольность
  *  
  *  
-  class Point
-{
-    public int X { get; }
-    public int Y { get; }
-
-    // Приватный конструктор
-    private Point(int x, int y)
-    {
-        X = x;
-        Y = y;
-    }
-
-    // Статический метод для проверки
-    public static bool CanCreate(int x, int y)
-    {
-        return x >= 0 && y >= 0;
-    }
-
-    // Фабричный метод для создания объекта с проверкой
-    public static Point Create(int x, int y)
-    {
-        if (!CanCreate(x, y))
-        {
-            return null; // Возвращаем null, если нельзя создать объект
-        }
-        return new Point(x, y);
-    }
-}
-
-Point p = Point.Create(-1, 5);
-if (p != null)
-{
-    Console.WriteLine($"Создана точка с координатами: {p.X}, {p.Y}");
-}
-else
-{
-    Console.WriteLine("Не удалось создать точку.");
-}
-
 
 
 
