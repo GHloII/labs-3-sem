@@ -3,7 +3,7 @@
 #include <vector>
 #include <cstdint>
 #include <bitset>
-#include <windows.h>  // Для работы с кодировками Windows
+#include <windows.h>  
 #include <iomanip>
 
 
@@ -258,7 +258,7 @@ private:
 int main() {
 
     std::vector<uint32_t> bad_files;                        // Вектор с какашкой
-    std::string filename = R"(\\.\T:)";                     // Диск с FAT32
+    std::string filename = R"(\\.\F:)";                     // Диск с FAT32
     Fat32 *disk;
     try
     {
