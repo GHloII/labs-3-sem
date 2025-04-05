@@ -39,49 +39,32 @@ struct BootSector {
     uint32_t volumeID;           // Уникальный идентификатор тома. Это поле используется для идентификации тома и может быть сгенерировано случайным образом.
     char     volumeLabel[11];    // Метка тома (Volume Label). Это строка, которая может содержать метку для раздела (например, "NO_NAME "). Это поле не является обязательным.
     char     fsType[8];          // Тип файловой системы. Например, для FAT32 здесь будет строка "FAT32 ".
-};
-
-
-
-struct FAT32_DIR_ENTRY_T {
-    char DIR_Name[11];
-    UINT8 DIR_Attr;
-    UINT8 DIR_NTRes;
-    UINT8 DIR_CrtTime_Tenth;
-    UINT16 DIR_CrtTime;
-    UINT16 DIR_CrtDate;
-    UINT16 DIR_LstAccDate;
-    UINT16 DIR_FstClusHI;
-    UINT16 DIR_WrtTime;
-    UINT16 DIR_WrtDate;
-    UINT16 DIR_FstClusLO;
-    UINT32 DIR_FileSize;
-};
-
-struct DirEntry {
-    uint8_t  name[11];
-    uint8_t  attr;
-    uint8_t  ntRes;
-    uint8_t  crtTimeTenth;
-    uint16_t crtTime;
-    uint16_t crtDate;
-    uint16_t lstAccDate;
-    uint16_t fstClusHi;
-    uint16_t wrtTime;
-    uint16_t wrtDate;
-    uint16_t fstClusLo;
-    uint32_t fileSize;
-};
-
-struct LFNEntry {
-    uint8_t order;
-    uint16_t name1[5];
-    uint8_t attr;
-    uint8_t type;
-    uint8_t checksum;
-    uint16_t name2[6];
-    uint16_t zero;
-    uint16_t name3[2];
+};                               
+                                 
+struct DirEntry {                              
+    uint8_t  name[11];           // Массив из 11 байт, который хранит имя файла или директории.
+    uint8_t  attr;               // Атрибуты файла или директории. Это флаг, который может включать различные значения, такие как: 0x01 — атрибут "только для чтения" 0x02 — атрибут "скрытый файл"  0x04 — атрибут "системный файл"  0x08 — атрибут "метка тома" 0x10 — атрибут "директория" 0x20 — атрибут "архив"
+    uint8_t  ntRes;              // Этот байт зарезервирован для использования в операционных системах, основанных на DOS. В современных системах его значение обычно игнорируется.
+    uint8_t  crtTimeTenth;       // Десятая часть секунды при создании файла (значение от 0 до 99). Это поле дает точность до 10 миллисекунд.
+    uint16_t crtTime;            // Время создания файла
+    uint16_t crtDate;            // Дата создания файла
+    uint16_t lstAccDate;         // Дата последнего доступа к файлу в таком же формате, как и для crtDate
+    uint16_t fstClusHi;          // Старшая часть номера кластера первого кластера файла (старшие 16 бит). Для файлов, чьи данные не умещаются в одном кластере, эта часть указывает на номер первого кластера данных.
+    uint16_t wrtTime;            // Время последней записи
+    uint16_t wrtDate;            // Дата последней записи
+    uint16_t fstClusLo;          // Младшая часть номера кластера первого кластера файла (младшие 16 бит).
+    uint32_t fileSize;           // Размер файла в байтах.
+};                               
+                                 
+struct LFNEntry {                // Эта структура описывает запись длинного имени файла, которое в FAT32 не может быть сохранено в одной записи DirEntry, поскольку FAT32 использует ограничение 8.3 для имени. 
+    uint8_t order;               // Порядковый номер записи. Это значение определяет порядок, в котором части имени должны быть собраны. Оно начинается с младших значений и увеличивается для каждой новой записи LFN.
+    uint16_t name1[5];           // Первые 5 символов длинного имени. Поскольку в FAT32 используется кодировка UTF-16, каждый символ занимает 2 байта.
+    uint8_t attr;                // Атрибут записи, который всегда равен 0x0F для записи длинного имени.
+    uint8_t type;                // Этот байт зарезервирован для использования в операционных системах, основанных на DOS, и обычно равен 0.
+    uint8_t checksum;            // Контрольная сумма имени файла в формате 8.3. Это значение используется для проверки правильности собранного имени файла.
+    uint16_t name2[6];           // Следующие 6 символов длинного имени, представленных в формате UTF-16.
+    uint16_t zero;               // Два байта, которые всегда равны нулю. Это значение используется для выравнивания структуры.
+    uint16_t name3[2];           // Последние два символа длинного имени, представленных в формате UTF-16.
 };
 
 #pragma pack(pop)
@@ -165,28 +148,33 @@ std::string decodeShortName(const uint8_t name[11]) {
     return shortName;
 }
 
-void readDirectory(std::string filename, const BootSector& bs, const std::vector<uint32_t>& fatTable, uint32_t cluster = 0, const std::string& path = "/") {
-    std::ifstream image(filename, std::ios::binary);
-    if (!image) {
+void readDirectory(std::string filename, const BootSector& bs, const std::vector<uint32_t>& fatTable, uint32_t cluster = 0, const std::string& path = "/") { //кластер, с которого начинается чтение (по умолчанию 0)
+    std::ifstream disk(filename, std::ios::binary);
+    if (!disk) {
         std::cerr << "Ошибка: Не удалось открыть файл " << filename << "\n";
         return;
     }
 
-    uint32_t dataBegin = bs.reservedSectors + (bs.numFATs * bs.sectorsPerFAT32);
+    uint32_t dataBegin = bs.reservedSectors + (bs.numFATs * bs.sectorsPerFAT32);                        // определяет начало данных на диске, который включает все зарезервированные сектора и сектора, занятые таблицами FAT. Если cluster равен 0 (по умолчанию), это означает, что нужно начать с корневого кластера, указанный в rootCluster.
     if (cluster == 0) {
         cluster = bs.rootCluster;
     }
 
     const uint32_t bytesPerCluster = bs.bytesPerSector * bs.sectorsPerCluster;
-    std::vector<LFNEntry> lfnBuffer;
+    std::vector<LFNEntry> lfnBuffer;                                                                    // Вектор lfnBuffer используется для хранения записей длинных имён файлов (LFN, Long File Name).
 
-    while (cluster < 0x0FFFFFF8 && cluster >= 2) {
+    while (cluster < 0x0FFFFFF8 && cluster >= 2) {                                                      // Пока значение cluster не указывает на специальный маркер окончания цепочки кластеров (0x0FFFFFF8) и не меньше 2 (так как кластеры с номерами 0 и 1 зарезервированы).
+        if (cluster >= fatTable.size()) {
+            std::cerr << "Ошибка: кластер " << cluster << " выходит за границы FAT-таблицы.\n";
+            return;
+        }
+
         uint32_t sector = dataBegin + (cluster - 2) * bs.sectorsPerCluster;
         uint32_t offset = sector * bs.bytesPerSector;
 
-        image.seekg(offset);
+        disk.seekg(offset);
         std::vector<uint8_t> clusterData(bytesPerCluster);
-        image.read(reinterpret_cast<char*>(clusterData.data()), bytesPerCluster);
+        disk.read(reinterpret_cast<char*>(clusterData.data()), bytesPerCluster);
 
         for (size_t i = 0; i < bytesPerCluster; i += 32) {
             DirEntry* entry = reinterpret_cast<DirEntry*>(&clusterData[i]);
@@ -203,7 +191,7 @@ void readDirectory(std::string filename, const BootSector& bs, const std::vector
                 : decodeLFN(lfnBuffer);
             lfnBuffer.clear();
 
-            uint32_t firstCluster = (entry->fstClusHi << 16) | entry->fstClusLo;
+            uint32_t firstCluster = (entry->fstClusHi << 16) | entry->fstClusLo; // сделать фат тэйбл ключ значенпе по значению кластера записывать название и провять на совподение
 
             if ((entry->attr & 0x10) && (fileEntryName == "." || fileEntryName == "..")) continue;
 
@@ -221,6 +209,11 @@ void readDirectory(std::string filename, const BootSector& bs, const std::vector
         cluster = fatTable[cluster];
     }
 }
+
+
+
+
+
 int main() {
     BootSector bs;
     std::vector<uint32_t> fatTable;                         // Вектор с таблицей FAT
