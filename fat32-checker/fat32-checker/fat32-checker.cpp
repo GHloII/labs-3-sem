@@ -69,179 +69,207 @@ struct LFNEntry {                // Эта структура описывает
 
 #pragma pack(pop)
 
+class Fat32 {
 
-
-
-// Функция для чтения таблицы FAT
-std::vector<uint32_t> readFAT(std::ifstream& disk, const BootSector& bs) {
-    uint32_t fatSize = bs.sectorsPerFAT32 * bs.bytesPerSector;
-    std::vector<uint32_t> fatTable(fatSize / sizeof(uint32_t));
-
-    uint32_t fatOffset = bs.reservedSectors * bs.bytesPerSector;    // Адрес начала FAT
-    disk.seekg(fatOffset, std::ios::beg);                           // Функция seekg перемещает указатель чтения в файл на заданное смещение. std::ios::beg означает, что отсчёт идет от начала файла (то есть, указатель будет перемещен на fatOffset байтов от начала файла). Это гарантирует, что мы начинаем читать таблицу FAT именно с того места, где она начинается на диске.
-    disk.read(reinterpret_cast<char*>(fatTable.data()), fatSize);   // преобразует указатель на вектор в указатель на массив байтов (массив символов char). Это необходимо, потому что функция read работает с потоком байтов, а не с типизированными данными.
-
-    if (!disk) {
-        std::cerr << "Error: Failed to read FAT\n";
-    }
-    return fatTable;
-}
-
-// Функция для чтения загрузочного сектора
-void readBootSector(const std::string& filename, BootSector& bs, std::vector<uint32_t>& fatTable) {
-    std::ifstream disk(filename, std::ios::binary);
-    if (!disk) {
-        std::cerr << "Error: Failed to open file\n";
-        return;
+public:
+    
+    Fat32(const std::string filename)
+        : filename_(filename)   // Инициализация const string   
+    {
+        diskOpener();
+        readBootSector();
+        readDirectory(bs_, fatTable_);
+        printD(fatTable_);
     }
 
-    disk.read(reinterpret_cast<char*>(&bs), sizeof(BootSector));    //reinterpret_cast<char*>(&bs) преобразует указатель на структуру bs в указатель на массив байтов, то есть на char*. Почему именно char? Потому что в C++ char всегда представляет собой 1 байт данных.
-    if (!disk) {                                                    //После этого ты получаешь указатель на первый байт структуры BootSector, и таким образом можешь записать в эту структуру данные, прочитанные из файла.
-        std::cerr << "Error: Failed to read boot sector\n";
-        return;
+    ~Fat32() {
+        if (disk_.is_open()) {
+            disk_.close();
+        }
     }
 
-    std::cout << "File system: " << std::string(bs.fsType, 8) << "\n";
-    std::cout << "Cluster size: " << (bs.sectorsPerCluster * bs.bytesPerSector) << " bytes\n";
-    std::cout << "Root directory's first cluster: " << bs.rootCluster << "\n";
-    std::cout << "FAT size: " << (bs.sectorsPerFAT32 * bs.bytesPerSector) << " bytes\n";
+private:
 
-    fatTable = readFAT(disk, bs);
-
-    disk.close();
-}
-
-// Подсчет количества кластеров
-void findClusterCount(const BootSector& bs) {
-    uint32_t totalSectors = bs.totalSectors32;
-    uint32_t fatSectors = bs.sectorsPerFAT32 * bs.numFATs;
-    uint32_t dataSectors = totalSectors - (bs.reservedSectors + fatSectors);
-    uint32_t totalClusters = dataSectors / bs.sectorsPerCluster;
-
-    std::cout << "Total clusters: " << totalClusters << "\n";
-}
-
-
-
-
-bool isLFNEntry(const DirEntry& entry) {
-    return (entry.attr & 0x0F) == 0x0F;
-}
-
-std::string decodeLFN(const std::vector<LFNEntry>& entries) {
-    std::u16string name;
-    for (auto it = entries.rbegin(); it != entries.rend(); ++it) {
-        const LFNEntry& e = *it;
-        for (auto ch : e.name1) if (ch != 0xFFFF && ch != 0) name += ch;
-        for (auto ch : e.name2) if (ch != 0xFFFF && ch != 0) name += ch;
-        for (auto ch : e.name3) if (ch != 0xFFFF && ch != 0) name += ch;
-    }
-    return std::string(name.begin(), name.end());
-}
-
-std::string decodeShortName(const uint8_t name[11]) {
-    std::string shortName;
-    for (int i = 0; i < 8 && name[i] != ' '; ++i)
-        shortName += static_cast<char>(name[i]);
-    if (name[8] != ' ')
-        shortName += '.' + std::string(reinterpret_cast<const char*>(&name[8]), 3);
-    return shortName;
-}
-
-void readDirectory(std::string filename, const BootSector& bs, const std::vector<uint32_t>& fatTable, uint32_t cluster = 0, const std::string& path = "/") { //кластер, с которого начинается чтение (по умолчанию 0)
-    std::ifstream disk(filename, std::ios::binary);
-    if (!disk) {
-        std::cerr << "Ошибка: Не удалось открыть файл " << filename << "\n";
-        return;
+    void diskOpener() {
+        disk_.open(filename_, std::ios::binary);
+        if (!disk_) {
+            // вызвать деструктор
+            throw std::runtime_error("file isnt open");     
+        }
+        std::cout << "file is open!";                                 
     }
 
-    uint32_t dataBegin = bs.reservedSectors + (bs.numFATs * bs.sectorsPerFAT32);                        // определяет начало данных на диске, который включает все зарезервированные сектора и сектора, занятые таблицами FAT. Если cluster равен 0 (по умолчанию), это означает, что нужно начать с корневого кластера, указанный в rootCluster.
-    if (cluster == 0) {
-        cluster = bs.rootCluster;
-    }
+    void readBootSector() {
 
-    const uint32_t bytesPerCluster = bs.bytesPerSector * bs.sectorsPerCluster;
-    std::vector<LFNEntry> lfnBuffer;                                                                    // Вектор lfnBuffer используется для хранения записей длинных имён файлов (LFN, Long File Name).
-
-    while (cluster < 0x0FFFFFF8 && cluster >= 2) {                                                      // Пока значение cluster не указывает на специальный маркер окончания цепочки кластеров (0x0FFFFFF8) и не меньше 2 (так как кластеры с номерами 0 и 1 зарезервированы).
-        if (cluster >= fatTable.size()) {
-            std::cerr << "Ошибка: кластер " << cluster << " выходит за границы FAT-таблицы.\n";
+        disk_.read(reinterpret_cast<char*>(&bs_), sizeof(BootSector));             //reinterpret_cast<char*>(&bs) преобразует указатель на структуру bs в указатель на массив байтов, то есть на char*. Почему именно char? Потому что в C++ char всегда представляет собой 1 байт данных.
+        if (!disk_) {                                                              //После этого ты получаешь указатель на первый байт структуры BootSector, и таким образом можешь записать в эту структуру данные, прочитанные из файла.
+            throw std::runtime_error("Error: Failed to read boot sector\n");
             return;
         }
 
-        uint32_t sector = dataBegin + (cluster - 2) * bs.sectorsPerCluster;
-        uint32_t offset = sector * bs.bytesPerSector;
+        std::cout << "File system: " << std::string(bs_.fsType, 8) << "\n";
+        std::cout << "Cluster size: " << (bs_.sectorsPerCluster * bs_.bytesPerSector) << " bytes\n";
+        std::cout << "Root directory's first cluster: " << bs_.rootCluster << "\n";
+        std::cout << "FAT size: " << (bs_.sectorsPerFAT32 * bs_.bytesPerSector) << " bytes\n";
 
-        disk.seekg(offset);
-        std::vector<uint8_t> clusterData(bytesPerCluster);
-        disk.read(reinterpret_cast<char*>(clusterData.data()), bytesPerCluster);
+        fatTable_ = readFAT(bs_);
+    }
 
-        for (size_t i = 0; i < bytesPerCluster; i += 32) {
-            DirEntry* entry = reinterpret_cast<DirEntry*>(&clusterData[i]);
+    std::vector<uint32_t> readFAT( const BootSector& bs) {
+        uint32_t fatSize = bs.sectorsPerFAT32 * bs.bytesPerSector;
+        std::vector<uint32_t> fatTable(fatSize / sizeof(uint32_t));
 
-            if (entry->name[0] == 0x00) return;
-            if (entry->name[0] == 0xE5) continue;
+        uint32_t fatOffset = bs.reservedSectors * bs.bytesPerSector;                // Адрес начала FAT
+        disk_.seekg(fatOffset, std::ios::beg);                                      // Функция seekg перемещает указатель чтения в файл на заданное смещение. std::ios::beg означает, что отсчёт идет от начала файла (то есть, указатель будет перемещен на fatOffset байтов от начала файла). Это гарантирует, что мы начинаем читать таблицу FAT именно с того места, где она начинается на диске.
+        disk_.read(reinterpret_cast<char*>(fatTable.data()), fatSize);              // преобразует указатель на вектор в указатель на массив байтов (массив символов char). Это необходимо, потому что функция read работает с потоком байтов, а не с типизированными данными.
 
-            if (isLFNEntry(*entry)) {
-                lfnBuffer.push_back(*reinterpret_cast<LFNEntry*>(entry));
-                continue;
-            }
+        if (!disk_) {
+            throw std::runtime_error("Error: Failed to read FAT\n");
+        }
+        return fatTable;
+    }
 
-            std::string fileEntryName = lfnBuffer.empty() ? decodeShortName(entry->name)
-                : decodeLFN(lfnBuffer);
-            lfnBuffer.clear();
+    // Подсчет количества кластеров
+    void findClusterCount(const BootSector& bs) {
+        uint32_t totalSectors = bs.totalSectors32;
+        uint32_t fatSectors = bs.sectorsPerFAT32 * bs.numFATs;
+        uint32_t dataSectors = totalSectors - (bs.reservedSectors + fatSectors);
+        uint32_t totalClusters = dataSectors / bs.sectorsPerCluster;
 
-            uint32_t firstCluster = (entry->fstClusHi << 16) | entry->fstClusLo; // сделать фат тэйбл ключ значенпе по значению кластера записывать название и провять на совподение
+        std::cout << "Total clusters: " << totalClusters << "\n";
+    }
 
-            if ((entry->attr & 0x10) && (fileEntryName == "." || fileEntryName == "..")) continue;
+    bool isLFNEntry(const DirEntry& entry) {
+        return (entry.attr & 0x0F) == 0x0F;
+    }
+    std::string decodeLFN(const std::vector<LFNEntry>& entries) {
+        std::u16string name;
+        for (auto it = entries.rbegin(); it != entries.rend(); ++it) {
+            const LFNEntry& e = *it;
+            for (auto ch : e.name1) if (ch != 0xFFFF && ch != 0) name += ch;
+            for (auto ch : e.name2) if (ch != 0xFFFF && ch != 0) name += ch;
+            for (auto ch : e.name3) if (ch != 0xFFFF && ch != 0) name += ch;
+        }
+        return std::string(name.begin(), name.end());
+    }
+    std::string decodeShortName(const uint8_t name[11]) {
+        std::string shortName;
+        for (int i = 0; i < 8 && name[i] != ' '; ++i)
+            shortName += static_cast<char>(name[i]);
+        if (name[8] != ' ')
+            shortName += '.' + std::string(reinterpret_cast<const char*>(&name[8]), 3);
+        return shortName;
+    }
 
-            std::string fullPath = path + fileEntryName;
+    void readDirectory(const BootSector& bs, const std::vector<uint32_t>& fatTable, uint32_t cluster = 0, const std::string& path = "/") { //кластер, с которого начинается чтение (по умолчанию 0)
 
-            std::cout << (entry->attr & 0x10 ? "[DIR] " : "[FILE] ")
-                << std::setw(30) << fullPath
-                << " | Size: " << entry->fileSize
-                << " | Cluster: " << firstCluster << "\n";
-
-            if ((entry->attr & 0x10) && firstCluster >= 2)
-                readDirectory(filename, bs, fatTable, firstCluster, fullPath + "/");
+        uint32_t dataBegin = bs.reservedSectors + (bs.numFATs * bs.sectorsPerFAT32);                        // определяет начало данных на диске, который включает все зарезервированные сектора и сектора, занятые таблицами FAT. Если cluster равен 0 (по умолчанию), это означает, что нужно начать с корневого кластера, указанный в rootCluster.
+        if (cluster == 0) {
+            cluster = bs.rootCluster;
         }
 
-        cluster = fatTable[cluster];
+        const uint32_t bytesPerCluster = bs.bytesPerSector * bs.sectorsPerCluster;
+        std::vector<LFNEntry> lfnBuffer;                                                                    // Вектор lfnBuffer используется для хранения записей длинных имён файлов (LFN, Long File Name).
+
+        while (cluster < 0x0FFFFFF8 && cluster >= 2) {                                                      // Пока значение cluster не указывает на специальный маркер окончания цепочки кластеров (0x0FFFFFF8) и не меньше 2 (так как кластеры с номерами 0 и 1 зарезервированы).
+            if (cluster >= fatTable.size()) {
+                std::cerr << "Ошибка: кластер " << cluster << " выходит за границы FAT-таблицы.\n";
+                return;
+            }
+
+            uint32_t sector = dataBegin + (cluster - 2) * bs.sectorsPerCluster;
+            uint32_t offset = sector * bs.bytesPerSector;
+
+            disk_.seekg(offset);
+            std::vector<uint8_t> clusterData(bytesPerCluster);
+            disk_.read(reinterpret_cast<char*>(clusterData.data()), bytesPerCluster);
+
+            for (size_t i = 0; i < bytesPerCluster; i += 32) {
+                DirEntry* entry = reinterpret_cast<DirEntry*>(&clusterData[i]);
+
+                if (entry->name[0] == 0x00) return;
+                if (entry->name[0] == 0xE5) continue;
+
+                if (isLFNEntry(*entry)) {
+                    lfnBuffer.push_back(*reinterpret_cast<LFNEntry*>(entry));
+                    continue;
+                }
+
+                std::string fileEntryName = lfnBuffer.empty() ? decodeShortName(entry->name)
+                    : decodeLFN(lfnBuffer);
+                lfnBuffer.clear();
+
+                uint32_t firstCluster = (entry->fstClusHi << 16) | entry->fstClusLo; // сделать фат тэйбл ключ значенпе по значению кластера записывать название и провять на совподение
+
+                if ((entry->attr & 0x10) && (fileEntryName == "." || fileEntryName == "..")) continue;
+
+                std::string fullPath = path + fileEntryName;
+
+                std::cout << (entry->attr & 0x10 ? "[DIR] " : "[FILE] ")
+                    << std::setw(30) << fullPath
+                    << " | Size: " << entry->fileSize
+                    << " | Cluster: " << firstCluster << "\n";
+
+                if ((entry->attr & 0x10) && firstCluster >= 2)
+                    readDirectory(bs, fatTable, firstCluster, fullPath + "/");
+            }
+
+            cluster = fatTable[cluster];
+        }
     }
-}
+
+    BootSector bs_;
+    std::vector<uint32_t> fatTable_;                               // Вектор с таблицей FAT
+    const std::string filename_;                                   // Диск с FAT32
+    std::ifstream disk_;
+    std::vector<uint32_t> bad_files_;                        // Вектор с какашкой добавить отдельную функцию для проверки
+
+
+ public:
+
+    void printD(const std::vector<uint32_t>& fatTable) {
+
+        for (size_t i = 0; i < 50 && i < fatTable.size(); ++i) {
+            if (fatTable[i] == 0x0FFFFFF7 || fatTable[i] == 0x0FFFFFF8) {
+                std::cout << "FAT[" << i << "] = " << fatTable[i] << " (BAD CLUSTER)";
+                //bad_files.push_back(i);
+            }
+            else if (fatTable[i] == 0x0FFFFFFF)
+            {
+                std::cout << "FAT[" << i << "] = " << fatTable[i] << " (EOF)";
+            }
+            else
+            {
+                std::cout << "FAT[" << i << "] = " << fatTable[i];
+            }
+            std::cout << "\n";
+        }
+    }
+
+
+};
+
+
 
 
 
 
 
 int main() {
-    BootSector bs;
-    std::vector<uint32_t> fatTable;                         // Вектор с таблицей FAT
+
     std::vector<uint32_t> bad_files;                        // Вектор с какашкой
-    std::string filename = R"(\\.\F:)";                     // Диск с FAT32
-
-    readBootSector(filename, bs, fatTable);
-    findClusterCount(bs);
-
-    readDirectory(filename, bs, fatTable);
-
-
- 
-    for (size_t i = 0; i < 50 &&  i < fatTable.size(); ++i) {
-        if (fatTable[i] == 0x0FFFFFF7 || fatTable[i] == 0x0FFFFFF8) {
-            std::cout << "FAT[" << i << "] = " << fatTable[i] << " (BAD CLUSTER)";
-            bad_files.push_back(i);
-        }
-        else if (fatTable[i] == 0x0FFFFFFF)
-        {
-            std::cout << "FAT[" << i << "] = " << fatTable[i] << " (EOF)";
-        }
-        else
-        {
-            std::cout << "FAT[" << i << "] = " << fatTable[i];
-        }
-        std::cout << "\n";
+    std::string filename = R"(\\.\T:)";                     // Диск с FAT32
+    Fat32 *disk;
+    try
+    {
+        disk = new Fat32(filename);
     }
+    catch (const std::exception& e) {
+    
+        std::cerr << "error: " << e.what() << '\n';
+    }
+    
+
 
     for (uint32_t file : bad_files) {
         std::cout << "bad clusters: " << file << "/n";
