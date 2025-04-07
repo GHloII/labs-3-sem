@@ -5,6 +5,7 @@
 #include <bitset>
 #include <windows.h>  
 #include <iomanip>
+#include <sstream>
 
 
 #pragma pack(push, 1)
@@ -79,7 +80,10 @@ public:
         diskOpener();
         readBootSector();
         readDirectory(bs_, fatTable_);
-        printD(fatTable_);
+        findBadClusters(fatTable_);
+
+        //printFatTable(fatTable_);
+        printFiles(files_);
     }
 
     ~Fat32() {
@@ -89,6 +93,64 @@ public:
     }
 
 private:
+
+    struct File {
+        std::string name;
+        std::string filename;
+
+        uint32_t firstClaster;
+        uint32_t fileSize;
+        uint16_t wrtTime;
+        uint16_t wrtDate;
+
+        // Метод для преобразования в строку
+        std::string toString() const {
+            std::ostringstream oss; // (поток вывода в строку)
+            oss << *this;  // Используем перегруженный оператор
+            return oss.str();
+        }
+
+        // Перегрузка оператора вывода
+        friend std::ostream& operator<<(std::ostream& os, const File& file) {
+            std::string displayName = file.name;
+            
+
+            os <<  "_________________________________________\n"
+                << "File: " << std::left << std::setw(30) << displayName << " \n"
+                << "________________________________________|\n"
+                << "Path  " << file.filename <<"\n"
+                << "Size:      " << std::setw(10) << file.fileSize << " bytes \n"
+                << "First Cluster: " << file.firstClaster <<"\n"
+                << "Modified:  " << formatFatDateTime(file.wrtDate, file.wrtTime) << "\n"
+                << "_________________________________________|\n\n";
+
+            return os;
+        }
+
+    private:
+        static std::string formatFatDateTime(uint16_t date, uint16_t time) {
+            // Разбор даты 
+            int year = 1980 + ((date >> 9) & 0x7F);
+            int month = (date >> 5) & 0x0F;
+            int day = date & 0x1F;
+
+            // Разбор времени 
+            int hour = (time >> 11) & 0x1F;
+            int minute = (time >> 5) & 0x3F;
+            int second = (time & 0x1F) * 2;
+
+            std::ostringstream oss;
+            oss << std::setfill('0')
+                << std::setw(4) << year << "-"
+                << std::setw(2) << month << "-"
+                << std::setw(2) << day << " "
+                << std::setw(2) << hour << ":"
+                << std::setw(2) << minute << ":"
+                << std::setw(2) << second;
+
+            return oss.str();
+        }
+    };
 
     void diskOpener() {
         disk_.open(filename_, std::ios::binary);
@@ -185,7 +247,7 @@ private:
             disk_.read(reinterpret_cast<char*>(clusterData.data()), bytesPerCluster);
 
             for (size_t i = 0; i < bytesPerCluster; i += 32) {
-                DirEntry* entry = reinterpret_cast<DirEntry*>(&clusterData[i]);
+                DirEntry* entry = reinterpret_cast<DirEntry*>(&clusterData[i]); // лишь указатель на область байтов не новая структура
 
                 if (entry->name[0] == 0x00) return;
                 if (entry->name[0] == 0xE5) continue;
@@ -199,16 +261,31 @@ private:
                     : decodeLFN(lfnBuffer);
                 lfnBuffer.clear();
 
-                uint32_t firstCluster = (entry->fstClusHi << 16) | entry->fstClusLo; // сделать фат тэйбл ключ значенпе по значению кластера записывать название и провять на совподение
+                uint32_t firstCluster = (entry->fstClusHi << 16) | entry->fstClusLo; 
 
-                if ((entry->attr & 0x10) && (fileEntryName == "." || fileEntryName == "..")) continue;
+                if ((entry->attr & 0x10) && (fileEntryName == "." || fileEntryName == "..")) continue; 
 
                 std::string fullPath = path + fileEntryName;
 
-                std::cout << (entry->attr & 0x10 ? "[DIR] " : "[FILE] ")
-                    << std::setw(30) << fullPath
-                    << " | Size: " << entry->fileSize
-                    << " | Cluster: " << firstCluster << "\n";
+                //std::cout << (entry->attr & 0x10 ? "[DIR] " : "[FILE] ")
+                //    << std::setw(30) << fullPath
+                //    << " | Size: " << entry->fileSize
+                //    << " | Cluster: " << firstCluster << "\n";
+
+                if (!(entry->attr & 0x10)) {    // если энтри это файл
+                    File file;
+                    file.filename = fullPath;
+                    file.name = fileEntryName;
+                    file.fileSize = entry->fileSize;
+                    file.firstClaster = firstCluster;
+                    file.wrtDate = entry->wrtDate;
+                    file.wrtTime = entry->wrtTime;
+
+                    files_.push_back(file);
+
+
+
+                }
 
                 if ((entry->attr & 0x10) && firstCluster >= 2)
                     readDirectory(bs, fatTable, firstCluster, fullPath + "/");
@@ -218,16 +295,27 @@ private:
         }
     }
 
-    BootSector bs_;
-    std::vector<uint32_t> fatTable_;                               // Вектор с таблицей FAT
-    const std::string filename_;                                   // Диск с FAT32
-    std::ifstream disk_;
-    std::vector<uint32_t> bad_files_;                        // Вектор с какашкой добавить отдельную функцию для проверки
+    void findBadClusters(const std::vector<uint32_t>& fatTable) {
 
+        for (size_t i = 0; i < fatTable.size(); ++i) {
+            if (fatTable[i] == 0x0FFFFFF7 || fatTable[i] == 0x0FFFFFF8) {
+                //std::cout << "FAT[" << i << "] = " << fatTable[i] << " (BAD CLUSTER)";
+                bad_clusters_.push_back(i);
+            }
+
+        }
+    }
+
+    BootSector bs_;
+    std::vector<uint32_t> fatTable_;                                  // Вектор с таблицей FAT
+    const std::string filename_;                                      // Диск с FAT32
+    std::ifstream disk_;
+    std::vector<uint32_t> bad_clusters_;                              // Вектор с какашкой добавить отдельную функцию для проверки
+    std::vector<File> files_;
 
  public:
 
-    void printD(const std::vector<uint32_t>& fatTable) {
+    void printFatTable(const std::vector<uint32_t>& fatTable) {
 
         for (size_t i = 0; i < 50 && i < fatTable.size(); ++i) {
             if (fatTable[i] == 0x0FFFFFF7 || fatTable[i] == 0x0FFFFFF8) {
@@ -246,7 +334,12 @@ private:
         }
     }
 
+    void printFiles(const std::vector<File> & files) {
 
+        for (auto file : files) {
+            std::cout << file;
+        }
+    }
 };
 
 
@@ -257,7 +350,7 @@ private:
 
 int main() {
 
-    std::vector<uint32_t> bad_files;                        // Вектор с какашкой
+
     std::string filename = R"(\\.\F:)";                     // Диск с FAT32
     Fat32 *disk;
     try
@@ -270,10 +363,6 @@ int main() {
     }
     
 
-
-    for (uint32_t file : bad_files) {
-        std::cout << "bad clusters: " << file << "/n";
-    }
     std::cin.get();                                           // Ожидает ввода, чтобы окно консоли не закрывалось сразу
     return 0;
 }
