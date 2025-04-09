@@ -6,7 +6,7 @@
 #include <windows.h>  
 #include <iomanip>
 #include <sstream>
-
+#include <unordered_set>
 
 #pragma pack(push, 1)
 struct BootSector {
@@ -81,7 +81,8 @@ public:
         readBootSector();
         readDirectory(bs_, fatTable_);
         findBadClusters(fatTable_);
-
+        updateFatHelperTable();
+        //FindLostFiles();
         //printFatTable(fatTable_);
         printFiles(files_);
     }
@@ -97,11 +98,12 @@ private:
     struct File {
         std::string name;
         std::string filename;
+        std::string attr;
 
-        uint32_t firstClaster;
-        uint32_t fileSize;
-        uint16_t wrtTime;
-        uint16_t wrtDate;
+        uint32_t firstClaster = 0;
+        uint32_t fileSize = 0;
+        uint16_t wrtTime = 0;
+        uint16_t wrtDate = 0;
 
         // Метод для преобразования в строку
         std::string toString() const {
@@ -113,22 +115,24 @@ private:
         // Перегрузка оператора вывода
         friend std::ostream& operator<<(std::ostream& os, const File& file) {
             std::string displayName = file.name;
-            
-
-            os <<  "_________________________________________\n"
+            std::string displayfilename = file.filename;
+            uint32_t displayfileSize = file.fileSize;
+            uint32_t displayFirstClaster= file.firstClaster;
+            os << "_________________________________________\n"
                 << "File: " << std::left << std::setw(30) << displayName << " \n"
+                << file.attr << "\n"
                 << "________________________________________|\n"
-                << "Path  " << file.filename <<"\n"
-                << "Size:      " << std::setw(10) << file.fileSize << " bytes \n"
-                << "First Cluster: " << file.firstClaster <<"\n"
+                << "Path  " << displayfilename <<"\n"
+                << "Size:      " << std::setw(10) << displayfileSize << " bytes \n"
+                << "First Cluster: " << displayFirstClaster <<"\n"
                 << "Modified:  " << formatFatDateTime(file.wrtDate, file.wrtTime) << "\n"
                 << "_________________________________________|\n\n";
 
             return os;
         }
 
-    private:
-        static std::string formatFatDateTime(uint16_t date, uint16_t time) {
+        private:
+            static std::string formatFatDateTime(uint16_t date, uint16_t time) {
             // Разбор даты 
             int year = 1980 + ((date >> 9) & 0x7F);
             int month = (date >> 5) & 0x0F;
@@ -151,6 +155,18 @@ private:
             return oss.str();
         }
     };
+
+    struct HelpTable {
+        const File* file = nullptr;
+        uint32_t nextCluster= 0;
+        bool isLost = 0;
+    };
+    struct BrokenFileInfo {
+        std::string filename;
+        std::string errorMessage;
+    };
+
+
 
     void diskOpener() {
         disk_.open(filename_, std::ios::binary);
@@ -191,7 +207,6 @@ private:
         return fatTable;
     }
 
-    // Подсчет количества кластеров
     void findClusterCount(const BootSector& bs) {
         uint32_t totalSectors = bs.totalSectors32;
         uint32_t fatSectors = bs.sectorsPerFAT32 * bs.numFATs;
@@ -272,8 +287,9 @@ private:
                 //    << " | Size: " << entry->fileSize
                 //    << " | Cluster: " << firstCluster << "\n";
 
-                if (!(entry->attr & 0x10)) {    // если энтри это файл
+                //if (!(entry->attr & 0x10)) {    // если энтри это файл
                     File file;
+                    entry->attr & 0x10 ? file.attr="[DIR] " : file.attr = "[FILE]" ;
                     file.filename = fullPath;
                     file.name = fileEntryName;
                     file.fileSize = entry->fileSize;
@@ -285,7 +301,7 @@ private:
 
 
 
-                }
+                //}
 
                 if ((entry->attr & 0x10) && firstCluster >= 2)
                     readDirectory(bs, fatTable, firstCluster, fullPath + "/");
@@ -296,22 +312,124 @@ private:
     }
 
     void findBadClusters(const std::vector<uint32_t>& fatTable) {
-
         for (size_t i = 0; i < fatTable.size(); ++i) {
-            if (fatTable[i] == 0x0FFFFFF7 || fatTable[i] == 0x0FFFFFF8) {
-                //std::cout << "FAT[" << i << "] = " << fatTable[i] << " (BAD CLUSTER)";
+            if (fatTable[i] == 0x0FFFFFF7) {
                 bad_clusters_.push_back(i);
             }
 
         }
     }
 
+    void updateFatHelperTable() {
+        fatHelperTable_.resize(fatTable_.size()); // переместить вызов кудато
+
+        for (const auto& file : files_) {                       // берем ФАЙл 
+            uint32_t cluster = file.firstClaster;
+
+            std::unordered_set<uint32_t> visited;
+            bool isBroken = false;
+            std::string errorReason;
+
+            
+            while (cluster < fatTable_.size()) {
+                errorReason = "";
+                if (visited.count(cluster)) {
+                    errorReason += "Cluster loop detected |";
+                    isBroken = true;
+                    break;
+                }
+                visited.insert(cluster);
+
+                if (fatHelperTable_[cluster].file!= nullptr) {
+                    isBroken = true;
+                    errorReason += "Cluster is already in use by another file:\t  " + fatHelperTable_[cluster].file->filename +"  " + fatHelperTable_[cluster].file->attr+ "|";
+
+                }
+
+                uint32_t nextCluster = fatTable_[cluster];
+                fatHelperTable_[cluster] = HelpTable{ &file, nextCluster };
+
+                if (nextCluster >= 0x0FFFFFF8 && nextCluster <= 0x0FFFFFFF) {
+                    break; // EOF
+                }
+
+                if (nextCluster == 0x00000000) {
+                    errorReason += "File chain ends on a free cluster |";
+                    isBroken = true;
+                    break;
+                }
+
+                if (nextCluster >= fatTable_.size()) {
+                    errorReason += "Next cluster index is out of FAT table bounds |";
+                    isBroken = true;
+                    break;
+                }
+
+                cluster = nextCluster;
+            }
+
+            if (isBroken) {
+                brokenFiles_.push_back(BrokenFileInfo{ file.filename, errorReason });
+            }
+        }
+    }
+
+    void FindLostFiles() { // надо обновлять хэлпер тэйбл !!!!!!!!!!!!!!!!!!!!!!!!!
+
+        for (size_t cluster = 0; cluster < fatTable_.size(); ++cluster) {
+            if (fatTable_[cluster] == 0x0FFFFFF7) {
+                // Пропускаем плохие кластеры (если такие есть)
+                continue;
+            }
+
+            // Проверяем, есть ли этот кластер в fatHelperTable_
+            if (cluster >= fatHelperTable_.size() || !fatHelperTable_[cluster].file) {
+                // Если кластер не найден в fatHelperTable_, значит файл потерян
+                std::vector<uint32_t> lostChain;
+                uint32_t currentCluster = cluster;
+
+                // Восстанавливаем цепочку кластеров для этого потерянного файла
+                while (currentCluster < fatTable_.size() && fatTable_[currentCluster] != 0x0FFFFFF7 && fatTable_[currentCluster] != 0x00000000) {
+                    lostChain.push_back(currentCluster);
+                    currentCluster = fatTable_[currentCluster];
+                }
+
+                // Добавляем восстановленную цепочку к потерянным файлам
+                if (!lostChain.empty()) {
+                    File file;
+                    file.firstClaster = lostChain[0];
+                    lostFiles_.push_back(file);  // Или используйте вашу структуру, чтобы сохранить цепочку кластеров
+                }
+            }
+        }
+
+        // Выводим потерянные файлы
+        for (const auto& lostFile : lostFiles_) {
+            uint32_t currentCluster = lostFile.firstClaster;
+            std::cout << "Lost file starting with cluster " << currentCluster << " has clusters: ";
+
+            // Восстанавливаем цепочку кластеров из таблицы FAT
+            while (currentCluster < fatTable_.size() && fatTable_[currentCluster] != 0x00000000) {
+                std::cout << currentCluster << " ";
+                currentCluster = fatTable_[currentCluster];
+            }
+
+            std::cout << ".\n";
+        }
+    }
+
     BootSector bs_;
-    std::vector<uint32_t> fatTable_;                                  // Вектор с таблицей FAT
-    const std::string filename_;                                      // Диск с FAT32
+    std::vector<uint32_t> fatTable_;                                    // Вектор с таблицей FAT
+    std::vector<HelpTable> fatHelperTable_;                             // Вектор с таблицей 
+    std::vector<File> lostFiles_;                                       // Вектор для хранения потерянных файлов
+
+    const std::string filename_;                                        // Диск с FAT32
     std::ifstream disk_;
-    std::vector<uint32_t> bad_clusters_;                              // Вектор с какашкой добавить отдельную функцию для проверки
+    std::vector<uint32_t> bad_clusters_;                              
     std::vector<File> files_;
+
+    std::vector<BrokenFileInfo> brokenFiles_;
+
 
  public:
 
@@ -338,6 +456,13 @@ private:
 
         for (auto file : files) {
             std::cout << file;
+        }
+    }
+
+    void printBrokenFiles() {
+        for (const auto& broken : brokenFiles_) {
+            std::cout << "Broken file: " << broken.filename
+                << " ---   " << broken.errorMessage << "\n";
         }
     }
 };
