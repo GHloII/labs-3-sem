@@ -7,6 +7,7 @@
 #include <iomanip>
 #include <sstream>
 #include <unordered_set>
+#include <codecvt>
 
 #pragma pack(push, 1)
 struct BootSector {
@@ -85,8 +86,8 @@ public:
 		findLostFiles(fatTable_);
 
 		//printFatTable(fatTable_);
-		//printFiles(files_);
-		printLostClusters(fatTable_);
+		printFiles(files_);
+		//printLostClusters(fatTable_);
 	}
 
 	~Fat32() {
@@ -225,11 +226,14 @@ private:
 		std::u16string name;
 		for (auto it = entries.rbegin(); it != entries.rend(); ++it) {
 			const LFNEntry& e = *it;
-			for (auto ch : e.name1) if (ch != 0xFFFF && ch != 0) name += ch;
-			for (auto ch : e.name2) if (ch != 0xFFFF && ch != 0) name += ch;
-			for (auto ch : e.name3) if (ch != 0xFFFF && ch != 0) name += ch;
+			for (char16_t ch : e.name1) if (ch != 0xFFFF && ch != 0) name += ch;
+			for (char16_t ch : e.name2) if (ch != 0xFFFF && ch != 0) name += ch;
+			for (char16_t ch : e.name3) if (ch != 0xFFFF && ch != 0) name += ch;
 		}
-		return std::string(name.begin(), name.end());
+
+		// Конвертация из UTF-16 в UTF-8
+		std::wstring_convert<std::codecvt_utf8_utf16<char16_t>, char16_t> converter;
+		return converter.to_bytes(name);
 	}
 	std::string decodeShortName(const uint8_t name[11]) {
 		std::string shortName;
@@ -494,7 +498,7 @@ public:
 
 int main() {
 
-
+	std::locale::global(std::locale("en_US.UTF-8"));
 	std::string filename = R"(\\.\F:)";                     // Диск с FAT32
 	Fat32* disk;
 	try
