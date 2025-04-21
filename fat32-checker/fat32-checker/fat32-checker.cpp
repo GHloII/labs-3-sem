@@ -71,23 +71,106 @@ struct LFNEntry {                // Эта структура описывает
 
 #pragma pack(pop)
 
+
+struct File {
+	std::string name;
+	std::string filename;
+	std::string attr;
+
+	uint8_t attr_int = 0;
+	uint32_t firstClaster = 0;
+	uint32_t fileSize = 0;
+	uint16_t wrtTime = 0;
+	uint16_t wrtDate = 0;
+
+	// Метод для преобразования в строку
+	std::string toString() const {
+		std::ostringstream oss; // (поток вывода в строку)
+		oss << *this;  // Используем перегруженный оператор
+		return oss.str();
+	}
+
+	// Перегрузка оператора вывода
+	friend std::ostream& operator<<(std::ostream& os, const File& file) {
+		std::string displayName = file.name;
+		std::string displayfilename = file.filename;
+		uint32_t displayfileSize = file.fileSize;
+		uint32_t displayFirstClaster = file.firstClaster;
+		os << "_________________________________________\n"
+			<< "File: " << std::left << std::setw(30) << displayName << " \n"
+			<< file.attr_int << "\n"
+			<< "________________________________________|\n"
+			<< "Path  " << displayfilename << "\n"
+			<< "Size:      " << std::setw(10) << displayfileSize << " bytes \n"
+			<< "First Cluster: " << displayFirstClaster << "\n"
+			<< "Modified:  " << formatFatDateTime(file.wrtDate, file.wrtTime) << "\n"
+			<< "_________________________________________|\n\n";
+
+		return os;
+	}
+
+private:
+	static std::string formatFatDateTime(uint16_t date, uint16_t time) {
+		// Разбор даты 
+		int year = 1980 + ((date >> 9) & 0x7F);
+		int month = (date >> 5) & 0x0F;
+		int day = date & 0x1F;
+
+		// Разбор времени 
+		int hour = (time >> 11) & 0x1F;
+		int minute = (time >> 5) & 0x3F;
+		int second = (time & 0x1F) * 2;
+
+		std::ostringstream oss;
+		oss << std::setfill('0')
+			<< std::setw(4) << year << "-"
+			<< std::setw(2) << month << "-"
+			<< std::setw(2) << day << " "
+			<< std::setw(2) << hour << ":"
+			<< std::setw(2) << minute << ":"
+			<< std::setw(2) << second;
+
+		return oss.str();
+	}
+};
+struct BrokenFileInfo {
+	std::string filename;
+	std::string errorMessage;
+};
+
 class Fat32 {
 
 public:
 
-	Fat32(const std::string filename)
-		: filename_(filename)   // Инициализация const string   
-	{
-		diskOpener();
-		readBootSector();
-		readDirectory(bs_, fatTable_);
-		findBadClusters(fatTable_);
-		updateFatHelperTable();
-		findLostFiles(fatTable_);
+	//Fat32(const std::string filename)
+	//	: filename_(filename)   // Инициализация const string   
+	//{
+	//	diskOpener();
+	//	readBootSector();
+	//	readDirectory(bs_, fatTable_);
+	//	findBadClusters(fatTable_);
+	//	updateFatHelperTable();
+	//	findLostFiles(fatTable_);
 
-		//printFatTable(fatTable_);
-		printFiles(files_);
-		//printLostClusters(fatTable_);
+	//	printFatTable(fatTable_);
+	//	//printFiles(files_);
+	//	//printLostClusters(fatTable_);
+	//	//printBrokenFiles();
+	//}
+
+	Fat32(const std::string& filename, bool skipInit = false)
+		: filename_(filename)
+	{
+		if (!skipInit) {
+			diskOpener();
+			readBootSector();
+			readDirectory(bs_, fatTable_);
+			//findBadClusters(fatTable_);
+			updateFatHelperTable();
+			findLostFiles(fatTable_);
+			
+			printBrokenFiles();
+		}
 	}
 
 	~Fat32() {
@@ -98,96 +181,34 @@ public:
 
 private:
 
-	struct File {
-		std::string name;
-		std::string filename;
-		std::string attr;
-
-		uint32_t firstClaster = 0;
-		uint32_t fileSize = 0;
-		uint16_t wrtTime = 0;
-		uint16_t wrtDate = 0;
-
-		// Метод для преобразования в строку
-		std::string toString() const {
-			std::ostringstream oss; // (поток вывода в строку)
-			oss << *this;  // Используем перегруженный оператор
-			return oss.str();
-		}
-
-		// Перегрузка оператора вывода
-		friend std::ostream& operator<<(std::ostream& os, const File& file) {
-			std::string displayName = file.name;
-			std::string displayfilename = file.filename;
-			uint32_t displayfileSize = file.fileSize;
-			uint32_t displayFirstClaster = file.firstClaster;
-			os << "_________________________________________\n"
-				<< "File: " << std::left << std::setw(30) << displayName << " \n"
-				<< file.attr << "\n"
-				<< "________________________________________|\n"
-				<< "Path  " << displayfilename << "\n"
-				<< "Size:      " << std::setw(10) << displayfileSize << " bytes \n"
-				<< "First Cluster: " << displayFirstClaster << "\n"
-				<< "Modified:  " << formatFatDateTime(file.wrtDate, file.wrtTime) << "\n"
-				<< "_________________________________________|\n\n";
-
-			return os;
-		}
-
-	private:
-		static std::string formatFatDateTime(uint16_t date, uint16_t time) {
-			// Разбор даты 
-			int year = 1980 + ((date >> 9) & 0x7F);
-			int month = (date >> 5) & 0x0F;
-			int day = date & 0x1F;
-
-			// Разбор времени 
-			int hour = (time >> 11) & 0x1F;
-			int minute = (time >> 5) & 0x3F;
-			int second = (time & 0x1F) * 2;
-
-			std::ostringstream oss;
-			oss << std::setfill('0')
-				<< std::setw(4) << year << "-"
-				<< std::setw(2) << month << "-"
-				<< std::setw(2) << day << " "
-				<< std::setw(2) << hour << ":"
-				<< std::setw(2) << minute << ":"
-				<< std::setw(2) << second;
-
-			return oss.str();
-		}
-	};
-
 	struct HelpTable {
 		const File* file = nullptr;
 		uint32_t nextCluster = 0;
 		bool isLost = false;
 	};
-	struct BrokenFileInfo {
-		std::string filename;
-		std::string errorMessage;
-	};
-
+	
 
 
 	void diskOpener() {
 		disk_.open(filename_, std::ios::binary);
 		if (!disk_) {
 			// вызвать деструктор
-			throw std::runtime_error("file isnt open");
+			throw std::runtime_error("file is not open\n");
 		}
-		std::cout << "file is open!";
+		std::cout << "file is open!\n";
 	}
 
 	void readBootSector() {
 
-		disk_.read(reinterpret_cast<char*>(&bs_), sizeof(BootSector));             //reinterpret_cast<char*>(&bs) преобразует указатель на структуру bs в указатель на массив байтов, то есть на char*. Почему именно char? Потому что в C++ char всегда представляет собой 1 байт данных.
-		if (!disk_) {                                                              //После этого ты получаешь указатель на первый байт структуры BootSector, и таким образом можешь записать в эту структуру данные, прочитанные из файла.
+		disk_.read(reinterpret_cast<char*>(&bs_), sizeof(BootSector));             // reinterpret_cast<char*>(&bs) преобразует указатель на структуру bs в указатель на массив байтов, то есть на char*. Почему именно char? Потому что в C++ char всегда представляет собой 1 байт данных.
+		if (!disk_) {                                                              // После этого ты получаешь указатель на первый байт структуры BootSector, и таким образом можешь записать в эту структуру данные, прочитанные из файла.
 			throw std::runtime_error("Error: Failed to read boot sector\n");
 			return;
 		}
-
+		if (std::string(bs_.fsType, 8) != "FAT32   ") {
+			throw std::runtime_error("Error: File system is not FAT 32 \n");
+			return;
+		}
 		std::cout << "File system: " << std::string(bs_.fsType, 8) << "\n";
 		std::cout << "Cluster size: " << (bs_.sectorsPerCluster * bs_.bytesPerSector) << " bytes\n";
 		std::cout << "Root directory's first cluster: " << bs_.rootCluster << "\n";
@@ -288,26 +309,24 @@ private:
 
 				std::string fullPath = path + fileEntryName;
 
-				//std::cout << (entry->attr & 0x10 ? "[DIR] " : "[FILE] ")
-				//    << std::setw(30) << fullPath
-				//    << " | Size: " << entry->fileSize
-				//    << " | Cluster: " << firstCluster << "\n";
 
-				//if (!(entry->attr & 0x10)) {    // если энтри это файл
 				File file;
+				file.attr_int = entry->attr;
 				entry->attr & 0x10 ? file.attr = "[DIR] " : file.attr = "[FILE]";
 				file.filename = fullPath;
 				file.name = fileEntryName;
 				file.fileSize = entry->fileSize;
 				file.firstClaster = firstCluster;
 				file.wrtDate = entry->wrtDate;
+				if (fileEntryName == "OLD") {
+					std::cout << "p";
+				}
 				file.wrtTime = entry->wrtTime;
 
 				files_.push_back(file);
 
 
 
-				//}
 
 				if ((entry->attr & 0x10) && firstCluster >= 2)
 					readDirectory(bs, fatTable, firstCluster, fullPath + "/");
@@ -422,7 +441,21 @@ private:
 			}
 		}
 
-		// добавить цикл для потерянных однокластерных файлов которые указывают на еоф !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+		for (size_t cluster = 0; cluster < fatTable.size(); ++cluster) {				// добавить цикл для потерянных однокластерных файлов которые указывают на еоф !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+			if (fatTable[cluster] >= 0x0FFFFFF8 && fatTable[cluster] <= 0x0FFFFFFF) { // EOF
+
+				if (cluster >= fatHelperTable_.size() || !fatHelperTable_[cluster].file) {
+					File file;
+					file.firstClaster = static_cast<uint32_t>(cluster);
+					lostFiles_.push_back(file);
+					File* savedFile = &lostFiles_.back();
+
+					fatHelperTable_[cluster].file = savedFile;
+					fatHelperTable_[cluster].isLost = true;
+				}
+			}
+		}
+		
 	}
 
 	BootSector bs_;
@@ -435,8 +468,12 @@ private:
 	std::vector<uint32_t> bad_clusters_;
 	std::vector<File> files_;
 
-	std::vector<BrokenFileInfo> brokenFiles_;
+	std::vector<File> cyclicFiles_;										// вектор если зациклились
+	std::vector<File> intersectingFiles_;								// вектор если пересечение
+	std::vector<File> noEOFfiles_;										// вектор если не нашли EOF
 
+	std::vector<BrokenFileInfo> brokenFiles_;
+	friend class MyClassTest;
 
 public:
 
@@ -488,18 +525,71 @@ public:
 			std::cout << ".\n";
 		}
 	}
+
+	const std::vector<uint32_t>& getFATTable() const {
+		return fatTable_;
+	}
+
+	const std::vector<File>& getLostFiles() const {
+		return lostFiles_;
+	}
+
+	const std::vector<File>& getFiles() const {
+		return files_;
+	}
+
+	const BootSector& getBootSector() const {
+		return bs_;
+	}
+
+	const std::vector<BrokenFileInfo>& getBrokenFiles() const {
+		return brokenFiles_;
+	}
 };
 
 
 
+// Простая валидация: одна латинская буква
+bool isValidDriveLetter(const std::string& input) {
+	return input.length() == 1 && std::isalpha(input[0]);
+}
 
+// Простой ввод с подтверждением
+std::string getDiskPath() {
+	std::string letter;
+	while (true) {
+		std::cout << "Enter drive letter (e.g. F): ";
+		std::getline(std::cin, letter);
+
+		// Удалим пробелы
+		letter.erase(remove_if(letter.begin(), letter.end(), ::isspace), letter.end());
+
+		if (!isValidDriveLetter(letter)) {
+			std::cout << "Invalid input. Please enter a single drive letter.\n\n";
+			continue;
+		}
+
+		// Приводим к верхнему регистру
+		char drive = std::toupper(letter[0]);
+		std::string path = R"(\\.\)" + std::string(1, drive) + ":";
+
+		std::cout << "Use disk path: " << path << "? (y/n): ";
+		std::string confirm;
+		std::getline(std::cin, confirm);
+		if (!confirm.empty() && (confirm[0] == 'y' || confirm[0] == 'Y')) {
+			return path;
+		}
+
+		std::cout << "Let's try again.\n\n";
+	}
+}
 
 
 
 int main() {
 
-	std::locale::global(std::locale("en_US.UTF-8"));
-	std::string filename = R"(\\.\F:)";                     // Диск с FAT32
+	std::locale::global(std::locale("en_US.UTF-8"));                    
+	std::string filename = getDiskPath();  // <- выбор пути у пользователя
 	Fat32* disk;
 	try
 	{
@@ -507,7 +597,7 @@ int main() {
 	}
 	catch (const std::exception& e) {
 
-		std::cerr << "error: " << e.what() << '\n';
+		std::cerr  << e.what() << '\n';
 	}
 
 
