@@ -1,5 +1,4 @@
-﻿using System;
-using System.IO;
+﻿
 namespace MyApplication
 {
 
@@ -16,7 +15,7 @@ namespace MyApplication
         static void Main()
         {
             // show greets;
-            int command = 0;
+            int command =0;
             while (true)
             {
                 Console.WriteLine("1 - запустить программу" +
@@ -52,8 +51,9 @@ namespace MyApplication
             while (true)
             {
                 string? consoleString = filePathReader.Read(S);
-                if (consoleString == null) {
-                    Console.WriteLine("ошибка");
+                if (WindowsNameValidator.IsInvalidWindowsName(consoleString,  out var reason)) {
+                    Console.WriteLine(reason);
+                    Console.WriteLine("Ошибка, введите данные заново");
                     continue;
                 }
                 FileInfo fileInfo = new FileInfo(consoleString);
@@ -84,6 +84,7 @@ namespace MyApplication
             }
         }
 
+     
         static double InputNumFromSTDIN(string S)
         {
             ILineInputProvider consoleInput = new ConsoleInputProvider();
