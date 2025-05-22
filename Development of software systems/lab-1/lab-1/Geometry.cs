@@ -207,7 +207,7 @@ static class MathGeometrySolver
 
             return new Rectangle(point_1_value, point_2_value, point_3_value, point_4_value);
         }
-        public static Rectangle Create(double x1, double y1, double x2, double y2, double x3, double y3, double x4, double y4)
+        public static Rectangle? Create(double x1, double y1, double x2, double y2, double x3, double y3, double x4, double y4)
         {
             Point p1 = new Point(x1, y1);
             Point p2 = new Point(x2, y2);
