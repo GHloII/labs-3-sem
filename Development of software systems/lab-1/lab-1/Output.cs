@@ -34,7 +34,7 @@ public class FileOutputProvider : IOutputProvider
 
         string json = JsonSerializer.Serialize(obj, new JsonSerializerOptions { WriteIndented = true });
         File.WriteAllText(_filePath, json);
-        
+        // обернуть в трай катч
     }
 }
 

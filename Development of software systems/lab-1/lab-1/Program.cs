@@ -225,7 +225,7 @@ namespace MyApplication
                         {
                             var dto = FileToClass<RectangleDto>(s);
                             if (dto != null)    
-                            rect = Rectangle.FromDto((RectangleDto)dto);
+                                rect = Rectangle.FromDto((RectangleDto)dto);
                         }
                         exit = true;
                         break;
@@ -241,6 +241,12 @@ namespace MyApplication
                 }
             }
             exit = false;
+            // Проверяем, что фигуры были созданы
+            if (rect == null )
+            {
+                Console.WriteLine("Ошибка: Прямоугольник не был создан!");
+                return;
+            }
             
             Console.WriteLine("Выберите способ заполнения Отрезка:");
             while (!exit)
@@ -294,14 +300,13 @@ namespace MyApplication
             Console.WriteLine("\nСохранение результата:");
             while (!exit)
             {
-                int command;
                 Console.WriteLine("1 - сохранить прямоугольник в файл" +
-                                "\n2 - сохранить отрезок в файл" +
-                                "\n3 - сохранить результат в файл" +
-                                "\n4 - не сохранять и продолжить"+
-                                "\n5 - выход из программы");
+                                  "\n2 - сохранить отрезок в файл" +
+                                  "\n3 - сохранить результат в файл" +
+                                  "\n4 - не сохранять и продолжить"+
+                                  "\n5 - выход из программы");
 
-                command = InputNumFromSTDIN();
+                var command = InputNumFromSTDIN();
                 string? s;
                 switch (command)
                 {
@@ -355,7 +360,7 @@ namespace MyApplication
 
 
 /* TO DO
-проверка файлнейма на адекватность
+
 рабочий прямоугольник
 
 1

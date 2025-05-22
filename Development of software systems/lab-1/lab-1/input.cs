@@ -9,7 +9,7 @@ public interface ILineInputProvider
 
 public interface IObjectInputProvider
 {
-    T? ReadObject<T>(string prompt = "") where T : class;
+    T? ReadObject<T>(string prompt = "") where T : class; 
 }
 
 // Объединяющий интерфейс, наследующий оба

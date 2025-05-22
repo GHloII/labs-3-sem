@@ -10,25 +10,39 @@ public static class WindowsNameValidator
         "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9"
     };
 
-    public static bool IsInvalidWindowsName(string name, out string reason)
+    public static bool IsInvalidWindowsName(string? path, out string reason)
     {
         reason = "";
 
-        if (string.IsNullOrWhiteSpace(name))
+        if (string.IsNullOrWhiteSpace(path))
         {
-            reason = "Имя пустое или состоит из пробелов.";
+            reason = "Путь пустой или состоит из пробелов.";
             return true;
         }
 
-        // Проверка на недопустимые символы
-        if (name.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0)
+        // Проверка на недопустимые символы в пути
+        if (path.IndexOfAny(Path.GetInvalidPathChars()) >= 0)
         {
-            reason = "Имя содержит недопустимые символы.";
+            reason = "Путь содержит недопустимые символы.";
+            return true;
+        }
+
+        string fileName = Path.GetFileName(path); // только имя файла
+
+        if (string.IsNullOrWhiteSpace(fileName))
+        {
+            reason = "Имя файла отсутствует в пути.";
+            return true;
+        }
+
+        if (fileName.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0)
+        {
+            reason = "Имя файла содержит недопустимые символы.";
             return true;
         }
 
         // Проверка на зарезервированные имена
-        string baseName = Path.GetFileNameWithoutExtension(name).ToUpperInvariant();
+        string baseName = Path.GetFileNameWithoutExtension(fileName).ToUpperInvariant();
         if (Array.Exists(ReservedNames, reserved => reserved.Equals(baseName, StringComparison.OrdinalIgnoreCase)))
         {
             reason = $"Имя \"{baseName}\" является зарезервированным в Windows.";
@@ -37,4 +51,5 @@ public static class WindowsNameValidator
 
         return false;
     }
+
 }
