@@ -51,7 +51,7 @@ public class FileInputProvider : IInputProvider
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Ошибка чтения JSON: {ex.Message}");
+            Console.WriteLine($"Ошибка чтения JSON");
             return null;
         }
     }
