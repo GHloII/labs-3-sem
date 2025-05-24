@@ -1,8 +1,7 @@
 ﻿
 namespace MyApplication
 {
-
-    class Program
+    class Program  
     {
         enum Сommands // возможно разделить по смыслу
         {
@@ -15,13 +14,13 @@ namespace MyApplication
         static void Main()
         {
             // show greets;
-            int command =0;
+            int command;
             while (true)
             {
                 Console.WriteLine("1 - запустить программу" +
                                   "\n" +
                                   "2 - выйти из программы ");
-                command = InputNumFromSTDIN();
+                command = ProgramInputOutput.InputNumFromSTDIN();
 
                 switch (command)
                 {
@@ -41,111 +40,6 @@ namespace MyApplication
             }
         }
 
-        static string InputFilePathFromSTDIN(string S, bool record = false)
-        {
-            ILineInputProvider consoleInput = new ConsoleInputProvider();
-            var filePathReader = new InputReader<string>(consoleInput, new FilePathParser());
-
-            
-
-            while (true)
-            {
-                string? consoleString = filePathReader.Read(S);
-                if (WindowsNameValidator.IsInvalidWindowsName(consoleString,  out var reason)) {
-                    Console.WriteLine(reason);
-                    Console.WriteLine("Ошибка, введите данные заново");
-                    continue;
-                }
-                FileInfo fileInfo = new FileInfo(consoleString);
-                
-                if (record && fileInfo.Length > 0)
-                {
-
-                    Console.WriteLine("В файле есть данные! Перезаписать файл?\n 1 - перезаписать \n2 - не перезаписывать");
-                    var command = InputNumFromSTDIN();
-
-                    switch (command)
-                    {
-                        case 1:
-                            Console.WriteLine("Файл будет перезаписан");
-                            break;
-
-                        case 2:
-                            continue;
-
-
-                        default:
-                            Console.WriteLine("команда не найдена");
-                            break;
-                    }
-                }
-
-                return consoleString;
-            }
-        }
-
-     
-        static double InputNumFromSTDIN(string S)
-        {
-            ILineInputProvider consoleInput = new ConsoleInputProvider();
-            var consoleDoubleReader = new InputReader<double?>(consoleInput, new NullableDoubleParser());
-
-            while (true)
-            {
-                double? consoleDouble = consoleDoubleReader.Read("Введите число "+ S);
-                if (consoleDouble != null)
-                {
-                    return (double) consoleDouble;
-                }
-
-                Console.WriteLine("ошибка");
-            }
-        }
-
-        public static int InputNumFromSTDIN()
-        {
-            ILineInputProvider consoleInput = new ConsoleInputProvider();
-            var consoleIntReader = new InputReader<int?>(consoleInput, new NullableIntParser());
-
-            while (true)
-            {
-                int? value = consoleIntReader.Read("Введите число: ");
-                if (value != null)
-                {
-                    return (int)value;
-                }
-
-                Console.WriteLine("ошибка");
-            }
-        }
-
-        static void ClassToFile<T>( T obj, string filePath) where T : class
-        {
-            var file_out = new FileOutputProvider(filePath);
-
-            if (obj is Rectangle rect)
-            {
-                file_out.WriteObject(rect.ToDto());
-                return;
-            }
-            file_out.WriteObject(obj);
-        }
-
-        static void StringToFile(string filePath,string s)
-        {
-            var file_out = new FileOutputProvider(filePath);
-            Console.WriteLine(s);
-            file_out.WriteLine(s);
-        }
-
-        static object? FileToClass<T>(string filePath) where T : class
-        {
-            IInputProvider file_in = new FileInputProvider(filePath);
-            T? obj = file_in.ReadObject<T>();
-
-            return obj;
-        }
-
         static Rectangle ManualFillRectangle()
         {
             Rectangle? rect = null;
@@ -154,10 +48,10 @@ namespace MyApplication
             {
                 Console.WriteLine("Введите координаты прямоугольника по часовой стрелке");
 
-                rect = Rectangle.Create(InputNumFromSTDIN("x1: "), InputNumFromSTDIN("y1: "),
-                                        InputNumFromSTDIN("x2: "), InputNumFromSTDIN("y2: "),
-                                        InputNumFromSTDIN("x3: "), InputNumFromSTDIN("y3: "),
-                                        InputNumFromSTDIN("x4: "), InputNumFromSTDIN("y4: "));
+                rect = Rectangle.Create(ProgramInputOutput.InputNumFromSTDIN("x1: "), ProgramInputOutput.InputNumFromSTDIN("y1: "),
+                                        ProgramInputOutput.InputNumFromSTDIN("x2: "), ProgramInputOutput.InputNumFromSTDIN("y2: "),
+                                        ProgramInputOutput.InputNumFromSTDIN("x3: "), ProgramInputOutput.InputNumFromSTDIN("y3: "),
+                                        ProgramInputOutput.InputNumFromSTDIN("x4: "), ProgramInputOutput.InputNumFromSTDIN("y4: "));
 
                 if (rect == null)
                     Console.WriteLine("Не возможно создать прямоугольник для данных точек \n");
@@ -168,8 +62,8 @@ namespace MyApplication
         {
             Console.WriteLine("Введите координаты отрезка");
 
-            var seg = new Segment(InputNumFromSTDIN("x1: "), InputNumFromSTDIN("y1: "),
-                                  InputNumFromSTDIN("x2: "), InputNumFromSTDIN("y2: "));
+            var seg = new Segment(ProgramInputOutput.InputNumFromSTDIN("x1: "), ProgramInputOutput.InputNumFromSTDIN("y1: "),
+                                  ProgramInputOutput.InputNumFromSTDIN("x2: "), ProgramInputOutput.InputNumFromSTDIN("y2: "));
 
             return seg;
         }
@@ -215,15 +109,15 @@ namespace MyApplication
             {
                 int command = 0;
                 Console.WriteLine("1 - заполнение  из файла\n2 - ввод из консоли");
-                command = InputNumFromSTDIN();
+                command = ProgramInputOutput.InputNumFromSTDIN();
 
                 switch (command)
                 {
                     case (int)Сommands.file:
-                        var s = InputFilePathFromSTDIN("Введите путь до файла: ");
+                        var s = ProgramInputOutput.InputFilePathFromSTDIN("Введите путь до файла: ");
                         if (s != null)
                         {
-                            var dto = FileToClass<RectangleDto>(s);
+                            var dto = ProgramInputOutput.FileToClass<RectangleDto>(s);
                             if (dto != null)    
                                 rect = Rectangle.FromDto((RectangleDto)dto);
                         }
@@ -251,17 +145,17 @@ namespace MyApplication
             Console.WriteLine("Выберите способ заполнения Отрезка:");
             while (!exit)
             {
-                int command = 0;
+                int command;
                 Console.WriteLine("1 - заполнение  из файла\n2 - ввод из консоли");
-                command = InputNumFromSTDIN();
+                command = ProgramInputOutput.InputNumFromSTDIN();
 
                 switch (command)
                 {
                     case (int)Сommands.file:
-                        var s = InputFilePathFromSTDIN("Введите путь до файла: ");
+                        var s = ProgramInputOutput.InputFilePathFromSTDIN("Введите путь до файла: ");
                         if (s != null)
                         {
-                            seg = (Segment?)FileToClass<Segment>(s);
+                            seg = (Segment?)ProgramInputOutput.FileToClass<Segment>(s);
                         }
                         exit = true;
                         break;
@@ -287,7 +181,7 @@ namespace MyApplication
 
 
             var ss = IntersectionFinder(rect, seg);
-            string points_string="";
+            string points_string = "";
             Console.WriteLine("Found intersections:");
             foreach (var point in ss)
             {
@@ -306,32 +200,32 @@ namespace MyApplication
                                   "\n4 - не сохранять и продолжить"+
                                   "\n5 - выход из программы");
 
-                var command = InputNumFromSTDIN();
+                var command = ProgramInputOutput.InputNumFromSTDIN();
                 string? s;
                 switch (command)
                 {
                     case 1:
-                        s = InputFilePathFromSTDIN("Введите путь до файла: ",true);
+                        s = ProgramInputOutput.InputFilePathFromSTDIN("Введите путь до файла: ",true);
                         if (s != null)
                         {
-                            ClassToFile(rect, s);
+                            ProgramInputOutput.ClassToFile(rect, s);
                         }
                         
                         break;
 
                     case 2:
-                        s = InputFilePathFromSTDIN("Введите путь до файла: ", true);
+                        s = ProgramInputOutput.InputFilePathFromSTDIN("Введите путь до файла: ", true);
                         if (s != null)
                         {
-                            ClassToFile(seg, s);
+                            ProgramInputOutput.ClassToFile(seg, s);
                         }
                         break;
 
                     case 3:
-                        s = InputFilePathFromSTDIN("Введите путь до файла: ", true);
+                        s = ProgramInputOutput.InputFilePathFromSTDIN("Введите путь до файла: ", true);
                         if (s != null)
                         {
-                            StringToFile( s,points_string);
+                            ProgramInputOutput.StringToFile(s, points_string);
                         }
                         break;
 

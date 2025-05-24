@@ -1,7 +1,7 @@
 ﻿
 using System.Text.Json.Serialization;
 
-static class MathGeometrySolver
+    public static class MathGeometrySolver
     {
         public static double Distance(in Point p1, in Point p2)
         {
@@ -97,7 +97,7 @@ static class MathGeometrySolver
         }
     }
 
-    class Point
+    public class Point
     {
         [JsonConstructor]
     public Point(double x, double y)
@@ -141,7 +141,7 @@ static class MathGeometrySolver
 
     }
 
-    class Segment
+    public class Segment
     {
         public Segment(double x1_value, double y1_value, double x2_value, double y2_value)
         {
@@ -220,10 +220,14 @@ static class MathGeometrySolver
         public RectangleDto ToDto() =>
             new RectangleDto(point_1, point_2, point_3, point_4);
 
-        public static Rectangle FromDto(RectangleDto? dto) =>
-            Create(dto.p1, dto.p2, dto.p3, dto.p4);
+    public static Rectangle? FromDto(RectangleDto? dto)
+    {
+        if (dto == null) return null;
 
-        public override bool Equals(object? obj)
+        return Create(dto.p1, dto.p2, dto.p3, dto.p4);
+    }
+
+    public override bool Equals(object? obj)
         {
             return obj is Rectangle rectangle &&
                    EqualityComparer<Point>.Default.Equals(point_1, rectangle.point_1) &&

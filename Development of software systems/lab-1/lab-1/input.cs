@@ -49,7 +49,7 @@ public class FileInputProvider : IInputProvider
             string json = File.ReadAllText(_filePath);
             return JsonSerializer.Deserialize<T>(json);
         }
-        catch (Exception ex)
+        catch (Exception)
         {
             Console.WriteLine($"Ошибка чтения JSON");
             return null;
