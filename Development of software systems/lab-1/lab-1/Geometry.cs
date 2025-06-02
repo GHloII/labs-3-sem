@@ -147,11 +147,31 @@ using System.Text.Json.Serialization;
         {
             point_1 = new Point(x1_value, y1_value);
             point_2 = new Point(x2_value, y2_value);
+            if (point_1 == null || point_2 == null)
+            {
+                throw new ArgumentNullException(nameof(point_1));
+            }
+            if (point_2.Equals(point_1))
+            {
+            Console.WriteLine("Точки совпадают");
+                    throw new InvalidOperationException();
+            }
         }
 
         [JsonConstructor]
         public Segment(Point point_1, Point point_2) // сделать как в поинте а то не десериализуется
         {
+
+            if (point_1 == null||point_2 == null)
+            {
+                throw new ArgumentNullException(nameof(point_1));
+            }
+            if (point_2.Equals(point_1))
+            {
+            Console.WriteLine("Точки совпадают");
+                throw new InvalidOperationException();
+            }
+
             this.point_1 = point_1;
             this.point_2 = point_2;
         }
@@ -220,14 +240,14 @@ using System.Text.Json.Serialization;
         public RectangleDto ToDto() =>
             new RectangleDto(point_1, point_2, point_3, point_4);
 
-    public static Rectangle? FromDto(RectangleDto? dto)
-    {
-        if (dto == null) return null;
+        public static Rectangle? FromDto(RectangleDto? dto)
+        {
+            if (dto == null) return null;
 
-        return Create(dto.p1, dto.p2, dto.p3, dto.p4);
-    }
+            return Create(dto.p1, dto.p2, dto.p3, dto.p4);
+        }
 
-    public override bool Equals(object? obj)
+        public override bool Equals(object? obj)
         {
             return obj is Rectangle rectangle &&
                    EqualityComparer<Point>.Default.Equals(point_1, rectangle.point_1) &&

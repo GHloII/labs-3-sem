@@ -34,7 +34,7 @@
             }
 
             if (fileName.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0)
-            {
+                {
                 reason = "Имя файла содержит недопустимые символы.";
                 return true;
             }

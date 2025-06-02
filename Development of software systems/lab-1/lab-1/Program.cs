@@ -3,17 +3,26 @@ namespace MyApplication
 {
     class Program  
     {
-        enum Сommands // возможно разделить по смыслу
+        enum Сommands 
         {
             start = 1,
             exit = 2,
             file = 1,
             console = 2,
         }
+        enum SaveOption
+        {
+            SaveRectangle = 1,
+            SaveSegment = 2,
+            SaveResult = 3,
+            SkipAndContinue = 4,
+            Exit = 5
+        }
+
 
         static void Main()
         {
-            // show greets;
+            Greeting_Text();
             int command;
             while (true)
             {
@@ -39,6 +48,17 @@ namespace MyApplication
                 }
             }
         }
+        public static void Greeting_Text()
+        {
+            Console.WriteLine("|--------------------------------------------------------------------------------------------------------------------------------|");
+            Console.WriteLine("|Автор программы:".PadRight(129) + "|");
+            Console.WriteLine("|\tИванов Глеб Игоревич".PadRight(123) + "|");
+            Console.WriteLine("|\tГруппа №433".PadRight(123) + "|");
+            Console.WriteLine("|\tВариант №10".PadRight(123) + "|");
+            Console.WriteLine("|Назначение программы:".PadRight(129) + "|");
+            Console.WriteLine("|\tДля заданного прямоугольника и отрезка на плоскости определить, пересекаются ли они.Найти координаты точек пересечения.  | ");
+            Console.WriteLine("|________________________________________________________________________________________________________________________________|\n");
+        }
 
         static Rectangle ManualFillRectangle()
         {
@@ -58,13 +78,19 @@ namespace MyApplication
             }
             return rect;
         }
-        static Segment ManualFillSegment()
+        static Segment? ManualFillSegment()
         {
+            Segment seg;
             Console.WriteLine("Введите координаты отрезка");
-
-            var seg = new Segment(ProgramInputOutput.InputNumFromSTDIN("x1: "), ProgramInputOutput.InputNumFromSTDIN("y1: "),
-                                  ProgramInputOutput.InputNumFromSTDIN("x2: "), ProgramInputOutput.InputNumFromSTDIN("y2: "));
-
+            try
+            {
+                seg = new Segment(ProgramInputOutput.InputNumFromSTDIN("x1: "), ProgramInputOutput.InputNumFromSTDIN("y1: "),
+                                      ProgramInputOutput.InputNumFromSTDIN("x2: "), ProgramInputOutput.InputNumFromSTDIN("y2: "));
+            }
+            catch (Exception)
+            {
+                return null;
+            }
             return seg;
         }
 
@@ -104,9 +130,9 @@ namespace MyApplication
             bool exit = false;
 
 
-            Console.WriteLine("Выберите способ заполнения Прямоугольника:");
             while (!exit)
             {
+            Console.WriteLine("Выберите способ заполнения Прямоугольника:");
                 int command = 0;
                 Console.WriteLine("1 - заполнение  из файла\n2 - ввод из консоли");
                 command = ProgramInputOutput.InputNumFromSTDIN();
@@ -133,18 +159,19 @@ namespace MyApplication
                         Console.WriteLine("команда не найдена");
                         break;
                 }
+                // Проверяем, что фигуры были созданы
+                if (rect == null )
+                {
+                    Console.WriteLine("Ошибка: Прямоугольник не был создан!");
+                    exit = false;
+
+                }
             }
             exit = false;
-            // Проверяем, что фигуры были созданы
-            if (rect == null )
-            {
-                Console.WriteLine("Ошибка: Прямоугольник не был создан!");
-                return;
-            }
             
-            Console.WriteLine("Выберите способ заполнения Отрезка:");
             while (!exit)
             {
+            Console.WriteLine("Выберите способ заполнения Отрезка:");
                 int command;
                 Console.WriteLine("1 - заполнение  из файла\n2 - ввод из консоли");
                 command = ProgramInputOutput.InputNumFromSTDIN();
@@ -169,15 +196,16 @@ namespace MyApplication
                         Console.WriteLine("команда не найдена");
                         break;
                 }
+                // Проверяем, что фигуры были созданы
+                if (rect == null || seg == null)
+                {
+                    Console.WriteLine("Ошибка: Отрезок не был создан!");
+                    exit = false;
+
+                }
+
             }
             exit = false;
-
-            // Проверяем, что фигуры были созданы
-            if (rect == null || seg == null)
-            {
-                Console.WriteLine("Ошибка: фигуры не были созданы!");
-                return;
-            }
 
 
             var ss = IntersectionFinder(rect, seg);
@@ -197,23 +225,21 @@ namespace MyApplication
                 Console.WriteLine("1 - сохранить прямоугольник в файл" +
                                   "\n2 - сохранить отрезок в файл" +
                                   "\n3 - сохранить результат в файл" +
-                                  "\n4 - не сохранять и продолжить"+
-                                  "\n5 - выход из программы");
+                                  "\n4 - выход из программы");
 
                 var command = ProgramInputOutput.InputNumFromSTDIN();
                 string? s;
-                switch (command)
+                switch ((SaveOption)command)
                 {
-                    case 1:
-                        s = ProgramInputOutput.InputFilePathFromSTDIN("Введите путь до файла: ",true);
+                    case SaveOption.SaveRectangle:
+                        s = ProgramInputOutput.InputFilePathFromSTDIN("Введите путь до файла: ", true);
                         if (s != null)
                         {
                             ProgramInputOutput.ClassToFile(rect, s);
                         }
-                        
                         break;
 
-                    case 2:
+                    case SaveOption.SaveSegment:
                         s = ProgramInputOutput.InputFilePathFromSTDIN("Введите путь до файла: ", true);
                         if (s != null)
                         {
@@ -221,7 +247,7 @@ namespace MyApplication
                         }
                         break;
 
-                    case 3:
+                    case SaveOption.SaveResult:
                         s = ProgramInputOutput.InputFilePathFromSTDIN("Введите путь до файла: ", true);
                         if (s != null)
                         {
@@ -229,13 +255,9 @@ namespace MyApplication
                         }
                         break;
 
-                    case 4:
+                    case SaveOption.SkipAndContinue:
                         exit = true;
                         break;
-
-                    case 5:
-                        exit = true;
-                        return;
 
                     default:
                         Console.WriteLine("команда не найдена");

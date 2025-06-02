@@ -134,7 +134,7 @@ public class FilePathParser : IParser<string>
                 stream.Close(); 
             }
 
-            value = Path.GetFullPath(value);
+            //value = Path.GetFullPath(value);
             return true;
         }
         catch (UnauthorizedAccessException)
